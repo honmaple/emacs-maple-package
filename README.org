@@ -1,0 +1,8 @@
+* emacs-maple-package
+  Speed up emacs startup.
+
+** Usage
+   #+begin_src elisp
+     (require 'maple-package)
+     (maple-package/initialize 'no-activate)
+   #+end_src
