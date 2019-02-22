@@ -128,6 +128,13 @@
     (maple-package-byte-compile-file maple-package-autoload-file))
   (load (byte-compile-dest-file maple-package-autoload-file) nil t))
 
+(defun maple-package-force-initialize()
+  "Force initialize package."
+  (interactive)
+  (when (file-exists-p maple-package-autoload-file)
+    (delete-file maple-package-autoload-file))
+  (maple-package-initialize-autoload))
+
 ;;;###autoload
 (defun maple-package-initialize(&optional no-activate)
   "Package initialize with NO-ACTIVATE."
