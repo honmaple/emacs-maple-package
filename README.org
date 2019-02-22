@@ -4,5 +4,5 @@
 ** Usage
    #+begin_src elisp
      (require 'maple-package)
-     (maple-package/initialize 'no-activate)
+     (maple-package-initialize 'no-activate)
    #+end_src

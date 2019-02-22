@@ -3,6 +3,8 @@
 ;; Copyright (C) 2015-2019 lin.jiang
 
 ;; Author: lin.jiang <mail@honmaple.com>
+;; Version: 0.1.0
+;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/honmaple/dotfiles/tree/master/emacs.d
 
 ;; This file is free software: you can redistribute it and/or modify
@@ -26,7 +28,50 @@
 ;;; Code:
 (require 'package)
 
-(defvar maple-package-autoload-file (concat user-emacs-directory "cache/autoloads.pkg.el"))
+(defvar maple-package-autoload-file (expand-file-name "cache/autoloads.pkg.el" user-emacs-directory))
+
+(defun maple-package-upgrade-alist(&optional filterp)
+  "Upgrade package alist with FILTERP."
+  (package-refresh-contents)
+  (let (upgrades)
+    (cl-flet ((get-version (name where)
+                           (let ((pkg (cadr (assq name where))))
+                             (when pkg
+                               (package-desc-version pkg)))))
+      (dolist (package (mapcar #'car package-alist))
+        (let ((in-archive (get-version package package-archive-contents)))
+          (when (and in-archive
+                     (version-list-< (get-version package package-alist)
+                                     in-archive))
+            (push (cadr (assq package package-archive-contents))
+                  upgrades)))))
+    (if filterp
+        (let ((v (mapcar (lambda(name) (list (package-desc-full-name name) name)) upgrades)))
+          (cdr (assoc (completing-read "Upgrade package: " v) v)))
+      upgrades)))
+
+(defun maple-package-upgrade-by-name()
+  "Upgrade packages with SELECTED."
+  (interactive)
+  (maple-package-upgrade t))
+
+(defun maple-package-upgrade (&optional filterp)
+  "Upgrade all packages automatically without showing *Packages* buffer with FILTERP."
+  (interactive)
+  (let ((upgrades (maple-package-upgrade-alist filterp)))
+    (if upgrades
+        (when (yes-or-no-p
+               (message "Upgrade %d package%s (%s)? "
+                        (length upgrades)
+                        (if (= (length upgrades) 1) "" "s")
+                        (mapconcat #'package-desc-full-name upgrades ", ")))
+          (save-window-excursion
+            (dolist (package-desc upgrades)
+              (let ((old-package (cadr (assq (package-desc-name package-desc)
+                                             package-alist))))
+                (package-install package-desc)
+                (package-delete  old-package)))))
+      (message "All packages are up to date"))))
 
 (defun maple-package-reload-autoload ()
   "Generate autoload file."
@@ -38,7 +83,7 @@
            (current-buffer))
     (insert "\n\n")
     (save-excursion
-      (dolist (spec (maple-package-package-alist))
+      (dolist (spec (maple-package-alist))
         (let* ((desc (cdr spec))
                (file (concat (package--autoloads-file-name desc) ".el")))
           (when (file-exists-p file)
@@ -53,7 +98,7 @@
       (goto-char (match-beginning 1))
       (kill-sexp))))
 
-(defun maple-package-package-alist ()
+(defun maple-package-alist ()
   "Return package alist."
   (cl-remove-duplicates
    (cl-loop for name in (mapcar #'car package-alist)
@@ -85,19 +130,19 @@
 
 ;;;###autoload
 (defun maple-package-initialize(&optional no-activate)
-  "Initialize NO-ACTIVATE."
-  (when (not (file-exists-p maple-package-autoload-file))
-    (package-initialize))
-  (setq package-alist nil)
-  (package-load-all-descriptors)
-  ;; (package-read-all-archive-contents)
-  (unless no-activate
-    (dolist (elt package-alist)
-      (condition-case err
-          (package-activate (car elt))
-        (error (message "%s" (error-message-string err))))))
-  (setq package--initialized t)
-  (package--build-compatibility-table)
+  "Package initialize with NO-ACTIVATE."
+  (if (not (file-exists-p maple-package-autoload-file))
+      (package-initialize)
+    (setq package-alist nil)
+    (package-load-all-descriptors)
+    ;; (package-read-all-archive-contents)
+    (unless no-activate
+      (dolist (elt package-alist)
+        (condition-case err
+            (package-activate (car elt))
+          (error (message "%s" (error-message-string err))))))
+    (setq package--initialized t)
+    (package--build-compatibility-table))
   (when no-activate (maple-package-initialize-autoload)))
 
 (provide 'maple-package)
