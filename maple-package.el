@@ -73,6 +73,46 @@
                 (package-delete  old-package)))))
       (message "All packages are up to date"))))
 
+
+;; https://emacs-china.org/t/advice/7566
+(defun maple-package-function-advices (function)
+  "Return FUNCTION's advices."
+  (let ((function-def (advice--symbol-function function))
+        (ad-functions '()))
+    (while (advice--p function-def)
+      (setq ad-functions (append `(,(advice--car function-def)) ad-functions))
+      (setq function-def (advice--cdr function-def)))
+    ad-functions))
+
+(define-advice describe-function-1 (:after (function) advice-remove-button)
+  "Add a button to remove advice."
+  (when (get-buffer "*Help*")
+    (with-current-buffer "*Help*"
+      (save-excursion
+        (goto-char (point-min))
+        (let ((ad-index 0)
+              (ad-list (reverse (maple-package-function-advices function))))
+          (while (re-search-forward "^:[-a-z]+ advice: \\(.+\\)$" nil t)
+            (let* ((name (string-trim (match-string 1) "'" "'"))
+                   (advice (or (intern-soft name) (nth ad-index ad-list))))
+              (when (and advice (functionp advice))
+                (let ((inhibit-read-only t))
+                  (insert " » ")
+                  (insert-text-button
+                   "Remove"
+                   'cursor-sensor-functions `((lambda (&rest _) (message "%s" ',advice)))
+                   'help-echo (format "%s" advice)
+                   'action
+                   ;; In case lexical-binding is off
+                   `(lambda (_)
+                      (when (yes-or-no-p (format "Remove %s ? " ',advice))
+                        (message "Removing %s of advice from %s" ',function ',advice)
+                        (advice-remove ',function ',advice)
+                        ;; (revert-buffer nil t)
+                        ))
+                   'follow-link t))))
+            (setq ad-index (1+ ad-index))))))))
+
 (defun maple-package-reload-autoload ()
   "Generate autoload file."
   (with-temp-file maple-package-autoload-file
@@ -119,21 +159,19 @@
       (unless noninteractive
         (message "Finished compiling %s" short-name)))))
 
-(defun maple-package-initialize-autoload()
-  "Initialize autoload file."
-  (when (not (file-exists-p maple-package-autoload-file))
+(defun maple-package-initialize-autoload(&optional force)
+  "Initialize autoload file with FORCE."
+  (when (or force (not (file-exists-p maple-package-autoload-file)))
     (maple-package-reload-autoload))
-  (when (file-newer-than-file-p maple-package-autoload-file
-                                (byte-compile-dest-file maple-package-autoload-file))
+  (when (or force (file-newer-than-file-p maple-package-autoload-file
+                                          (byte-compile-dest-file maple-package-autoload-file)))
     (maple-package-byte-compile-file maple-package-autoload-file))
   (load (byte-compile-dest-file maple-package-autoload-file) nil t))
 
 (defun maple-package-force-initialize()
   "Force initialize package."
   (interactive)
-  (when (file-exists-p maple-package-autoload-file)
-    (delete-file maple-package-autoload-file))
-  (maple-package-initialize-autoload))
+  (maple-package-initialize-autoload t))
 
 ;;;###autoload
 (defun maple-package-initialize(&optional no-activate)
