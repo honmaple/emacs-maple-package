@@ -154,23 +154,28 @@
   "Bytes compile FILE."
   (let ((short-name (file-name-nondirectory file))
         (byte-compile-dynamic-docstrings t))
-    (when (byte-compile-file file)
-      (load (byte-compile-dest-file file) nil t)
-      (unless noninteractive
-        (message "Finished compiling %s" short-name)))))
+    (condition-case nil
+        (when (byte-compile-file file)
+          (load (byte-compile-dest-file file) nil t)
+          (unless noninteractive
+            (message "Finished compiling %s" short-name)))
+      ((debug error)
+       (ignore-errors (delete-file (byte-compile-dest-file file)))))))
 
 (defun maple-package-initialize-autoload(&optional force)
   "Initialize autoload file with FORCE."
-  (when (or force (not (file-exists-p maple-package-autoload-file)))
-    (maple-package-reload-autoload))
-  (when (or force (file-newer-than-file-p maple-package-autoload-file
-                                          (byte-compile-dest-file maple-package-autoload-file)))
-    (maple-package-byte-compile-file maple-package-autoload-file))
-  (load (byte-compile-dest-file maple-package-autoload-file) nil t))
+  (let ((dest-file (byte-compile-dest-file maple-package-autoload-file)))
+    (when (or force (not (file-exists-p maple-package-autoload-file)))
+      (maple-package-reload-autoload))
+    (when (or force (file-newer-than-file-p maple-package-autoload-file dest-file))
+      (maple-package-byte-compile-file maple-package-autoload-file))
+    (load dest-file nil t)))
 
 (defun maple-package-force-initialize()
   "Force initialize package."
   (interactive)
+  (when (file-exists-p maple-package-autoload-file)
+    (delete-file maple-package-autoload-file))
   (maple-package-initialize-autoload t))
 
 ;;;###autoload
