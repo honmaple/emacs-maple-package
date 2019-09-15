@@ -5,7 +5,7 @@
 ;; Author: lin.jiang <mail@honmaple.com>
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "25.1"))
-;; URL: https://github.com/honmaple/dotfiles/tree/master/emacs.d
+;; URL: https://github.com/honmaple/emacs-maple-package
 
 ;; This file is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
