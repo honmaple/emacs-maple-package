@@ -30,49 +30,51 @@
 
 (defvar maple-package-autoload-file (expand-file-name "cache/autoloads.pkg.el" user-emacs-directory))
 
-(defun maple-package-upgrade-alist(&optional filterp)
-  "Upgrade package alist with FILTERP."
+
+(defun maple-package-upgrade-p(package)
+  "Check PACKAGE need to upgrade."
+  (when (and (package-installed-p package)
+             (cadr (assq package package-archive-contents)))
+    (let* ((newest-desc (cadr (assq package package-archive-contents)))
+           (newest-version  (package-desc-version newest-desc))
+           (installed-desc (cadr (or (assq package package-alist)
+                                     (assq package package--builtins))))
+           (installed-version (package-desc-version installed-desc)))
+      (version-list-< installed-version newest-version))))
+
+(defun maple-package-upgrade-alist()
+  "Upgrade package alist."
   (package-refresh-contents)
-  (let (upgrades)
-    (cl-flet ((get-version (name where)
-                           (let ((pkg (cadr (assq name where))))
-                             (when pkg
-                               (package-desc-version pkg)))))
-      (dolist (package (mapcar #'car package-alist))
-        (let ((in-archive (get-version package package-archive-contents)))
-          (when (and in-archive
-                     (version-list-< (get-version package package-alist)
-                                     in-archive))
-            (push (cadr (assq package package-archive-contents))
-                  upgrades)))))
-    (if filterp
-        (let ((v (mapcar (lambda(name) (list (package-desc-full-name name) name)) upgrades)))
-          (cdr (assoc (completing-read "Upgrade package: " v) v)))
-      upgrades)))
+  (cl-loop for package in package-activated-list
+           when (maple-package-upgrade-p package)
+           collect (cadr (assq package package-archive-contents))))
 
 (defun maple-package-upgrade-by-name()
   "Upgrade packages with SELECTED."
   (interactive)
-  (maple-package-upgrade t))
+  (maple-package-upgrade
+   (let ((packages (mapcar (lambda(name) (list (package-desc-full-name name) name)) (maple-package-upgrade-alist))))
+     (cdr (assoc (completing-read "Upgrade package: " packages) packages)))))
 
-(defun maple-package-upgrade (&optional filterp)
-  "Upgrade all packages automatically without showing *Packages* buffer with FILTERP."
+(defun maple-package-upgrade (&optional packages silent)
+  "Upgrade all PACKAGES with SILENT."
   (interactive)
-  (let ((upgrades (maple-package-upgrade-alist filterp)))
-    (if upgrades
-        (when (yes-or-no-p
-               (message "Upgrade %d package%s (%s)? "
-                        (length upgrades)
-                        (if (= (length upgrades) 1) "" "s")
-                        (mapconcat #'package-desc-full-name upgrades ", ")))
+  (let ((inhibit-message silent)
+        (packages (or packages (maple-package-upgrade-alist))))
+    (if packages
+        (when (yes-or-no-p (message "Upgrade %d package%s (%s)? "
+                                    (length packages)
+                                    (if (= (length packages) 1) "" "s")
+                                    (mapconcat #'package-desc-full-name packages ", ")))
           (save-window-excursion
-            (dolist (package-desc upgrades)
-              (let ((old-package (cadr (assq (package-desc-name package-desc)
-                                             package-alist))))
+            (dolist (package-desc packages)
+              (let* ((package-name (package-desc-name package-desc))
+                     (old-package  (cadr (assq package-name package-alist))))
                 (package-install package-desc)
-                (package-delete  old-package)))))
-      (message "All packages are up to date"))))
-
+                (package-delete  old-package)
+                (when silent
+                  (princ (format "\e[0;33m%s is up-to-date...\n\033[0m" package-name)))))))
+      (funcall (if silent 'princ 'message) "All packages are up to date"))))
 
 ;; https://emacs-china.org/t/advice/7566
 (defun maple-package-function-advices (function)
